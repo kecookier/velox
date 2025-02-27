@@ -1443,6 +1443,71 @@ class SparkCastExprTest : public functions::test::CastBaseTest {
         makeConstant<float>(std::numeric_limits<float>::min(), 1),
         makeConstant<int128_t>(0, 1, DECIMAL(38, 2)));
   }
+
+  template <typename T>
+  void testDecimalToFloatCasts() {
+    // short to short, scale up.
+    auto shortFlat = makeNullableFlatVector<int64_t>(
+        {DecimalUtil::kShortDecimalMin,
+         DecimalUtil::kShortDecimalMin,
+         -3,
+         0,
+         55,
+         DecimalUtil::kShortDecimalMax,
+         DecimalUtil::kShortDecimalMax,
+         std::nullopt},
+        DECIMAL(18, 18));
+    testCast(
+        shortFlat,
+        makeNullableFlatVector<T>(
+            {-1,
+             // the same DecimalUtil::kShortDecimalMin conversion, checking
+             // floating point diff works on decimals
+             -0.999999999999999999,
+             -0.000000000000000003,
+             0,
+             0.000000000000000055,
+             // the same DecimalUtil::kShortDecimalMax conversion, checking
+             // floating point diff works on decimals
+             0.999999999999999999,
+             1,
+             std::nullopt}));
+
+    auto longFlat = makeNullableFlatVector<int128_t>(
+        {DecimalUtil::kLongDecimalMin,
+         0,
+         DecimalUtil::kLongDecimalMax,
+         HugeInt::build(0xffff, 0xffffffffffffffff),
+         std::nullopt},
+        DECIMAL(38, 5));
+    testCast(
+        longFlat,
+        makeNullableFlatVector<T>(
+            {-1e33, 0, 1e33, 1.2089258196146293E19, std::nullopt}));
+
+    testCast(
+        makeNullableFlatVector<int128_t>(
+            {HugeInt::build(0, 299250000)}, DECIMAL(20, 4)),
+        makeNullableFlatVector<T>({29925.0}));
+
+    for (int scale = 0; scale <= 18; ++scale) {
+      int64_t unscaledValue = 123456789123456789l;
+      const int precision = 18;
+      auto rowSize =
+          facebook::velox::DecimalUtil::maxStringViewSize(precision, scale);
+      char buffer[rowSize];
+      memset(buffer, 0, rowSize);
+      auto size = facebook::velox::DecimalUtil::castToString<int64_t>(
+          unscaledValue, scale, rowSize, buffer);
+
+      T expect = util::Converter<SimpleTypeTrait<T>::typeKind>::tryCast(
+                     StringView(buffer, size))
+                     .value();
+      testCast(
+          makeNullableFlatVector<int64_t>({val}, DECIMAL(precision, scale)),
+          makeNullableFlatVector<T>({expect}));
+    }
+  }
 };
 
 class SparkCastExprTestAnsiOn : public SparkCastExprTest {
@@ -1483,6 +1548,24 @@ TEST_F(SparkCastExprTest, legacyCastModeIgnoresSessionAnsiOn) {
       makeNullableFlatVector<int32_t>({std::nullopt, 123}, INTEGER());
   assertEqualVectors(expected, result);
 }
+
+TEST_F(SparkCastExprTest, decimalToFloat) {
+  testDecimalToFloatCasts<float>();
+  testDecimalToFloatCasts<double>();
+}
+
+TEST_F(SparkCastExprTest, invalidDate) {
+  testInvalidCast<int8_t>(
+      "date", {12}, "Cast from TINYINT to DATE is not supported", TINYINT());
+  testInvalidCast<int16_t>(
+      "date",
+      {1234},
+      "Cast from SMALLINT to DATE is not supported",
+      SMALLINT());
+  testInvalidCast<int32_t>(
+      "date", {1234}, "Cast from INTEGER to DATE is not supported", INTEGER());
+  testInvalidCast<int64_t>(
+      "date", {1234}, "Cast from BIGINT to DATE is not supported", BIGINT());
 
 // ============================================================================
 // ANSI ON Tests

@@ -79,7 +79,7 @@ target_link_libraries(
   Folly::follybenchmark
 )
 
-add_executable(velox_sparksql_benchmarks_cast CastBenchmark.cpp)
+add_executable(velox_sparksql_benchmarks_cast SparkCastBenchmark.cpp)
 target_link_libraries(
   velox_sparksql_benchmarks_cast
   velox_functions_spark

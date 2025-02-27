@@ -424,29 +424,40 @@ VectorPtr CastExpr::applyDecimalToFloatCast(
   auto resultBuffer = result->asUnchecked<FlatVector<To>>()->mutableRawValues();
   const auto precisionScale = getDecimalPrecisionScale(*fromType);
   const auto simpleInput = input.as<SimpleVector<FromNativeType>>();
-  const auto scaleFactor = DecimalUtil::kPowersOfTen[precisionScale.second];
   applyToSelectedNoThrowLocal(context, rows, result, [&](int row) {
-    const auto unscaledValue = simpleInput->valueAt(row);
-    // Avoid precision loss: float has ~7 significant digits; casting unscaled
-    // int128 to float first loses precision for values with 8+ digits (e.g.
-    // 113751964). Divide in double then cast to float so result is correct.
-    To finalValue;
-    if constexpr (ToKind == TypeKind::REAL) {
-      const auto output =
-          util::Converter<TypeKind::DOUBLE>::tryCast(unscaledValue)
-              .thenOrThrow(folly::identity, [&](const Status& status) {
-                VELOX_USER_FAIL("{}", status.message());
-              });
-      finalValue = static_cast<To>(output / scaleFactor);
+    auto unscaledValue = simpleInput->valueAt(row);
+
+    Expected<To> expect;
+    if constexpr (
+        std::is_same_v<FromNativeType, int64_t> && ToKind == TypeKind::REAL) {
+      expect = hooks_->castShortDecimalToReal(
+          unscaledValue, precisionScale.first, precisionScale.second);
+    } else if constexpr (
+        std::is_same_v<FromNativeType, int128_t> && ToKind == TypeKind::REAL) {
+      expect = hooks_->castLongDecimalToReal(
+          unscaledValue, precisionScale.first, precisionScale.second);
+    } else if constexpr (
+        std::is_same_v<FromNativeType, int64_t> && ToKind == TypeKind::DOUBLE) {
+      expect = hooks_->castShortDecimalToDouble(
+          unscaledValue, precisionScale.first, precisionScale.second);
     } else {
-      const auto output =
-          util::Converter<ToKind>::tryCast(unscaledValue)
-              .thenOrThrow(folly::identity, [&](const Status& status) {
-                VELOX_USER_FAIL("{}", status.message());
-              });
-      finalValue = output / scaleFactor;
+      expect = hooks_->castLongDecimalToDouble(
+          unscaledValue, precisionScale.first, precisionScale.second);
     }
-    resultBuffer[row] = finalValue;
+
+    if (expect) {
+      resultBuffer[row] = expect.value();
+    } else {
+      if (setNullInResultAtError()) {
+        result->setNull(row, true);
+      } else {
+        context.setVeloxExceptionError(
+            row,
+            std::make_exception_ptr(VeloxUserError(
+                std::current_exception(), expect.error().message(), false)));
+      }
+      return;
+    }
   });
   return result;
 }
