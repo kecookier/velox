@@ -40,7 +40,7 @@ BUILD_GEOS="${BUILD_GEOS:-true}"
 export CMAKE_BUILD_TYPE=Release
 VELOX_BUILD_SHARED=${VELOX_BUILD_SHARED:-"OFF"} #Build folly shared for use in libvelox.so.
 SUDO="${SUDO:-"sudo --preserve-env"}"
-USE_CLANG="${USE_CLANG:-false}"
+USE_CLANG="${USE_CLANG:-true}"
 export INSTALL_PREFIX=${INSTALL_PREFIX:-"/usr/local"}
 DEPENDENCY_DIR=${DEPENDENCY_DIR:-$(pwd)/deps-download}
 VERSION=$(cat /etc/os-release | grep VERSION_ID)
@@ -62,6 +62,13 @@ function install_clang15 {
     CLANG_PACKAGE_LIST="${CLANG_PACKAGE_LIST} gcc-12 g++-12 libc++-12-dev"
   fi
   ${SUDO} apt install ${CLANG_PACKAGE_LIST} -y
+}
+
+function install_clang17 {
+  wget https://apt.llvm.org/llvm.sh
+  chmod +x llvm.sh
+  ${SUDO} ./llvm.sh 17
+  ${SUDO} apt install llvm-17 llvm-17-dev llvm-17-runtime clang-17 lldb-17 lld-17
 }
 
 # For Ubuntu 20.04 we need add the toolchain PPA to get access to gcc11.
@@ -112,7 +119,7 @@ function install_build_prerequisites {
   install_gcc11_if_needed
 
   if [[ ${USE_CLANG} != "false" ]]; then
-    install_clang15
+    install_clang17
   fi
 
 }
@@ -163,12 +170,12 @@ function install_boost {
   (
     cd ${DEPENDENCY_DIR}/boost
     if [[ ${USE_CLANG} != "false" ]]; then
-      ./bootstrap.sh --prefix=${INSTALL_PREFIX} --with-toolset="clang-15"
-      # Switch the compiler from the clang-15 toolset which doesn't exist (clang-15.jam) to
-      # clang of version 15 when toolset clang-15 is used.
+      ./bootstrap.sh --prefix=${INSTALL_PREFIX} --with-toolset="clang-17"
+      # Switch the compiler from the clang-17 toolset which doesn't exist (clang-17.jam) to
+      # clang of version 17 when toolset clang-17 is used.
       # This reconciles the project-config.jam generation with what the b2 build system allows for customization.
-      sed -i 's/using clang-15/using clang : 15/g' project-config.jam
-      ${SUDO} ./b2 "-j${NPROC}" -d0 install threading=multi toolset=clang-15 --without-python
+      sed -i 's/using clang-17/using clang : 17/g' project-config.jam
+      ${SUDO} ./b2 "-j${NPROC}" -d0 install threading=multi toolset=clang-17 --without-python
     else
       ./bootstrap.sh --prefix=${INSTALL_PREFIX}
       ${SUDO} ./b2 "-j${NPROC}" -d0 install threading=multi --without-python
@@ -335,8 +342,8 @@ function install_apt_deps {
 
 (
   if [[ ${USE_CLANG} != "false" ]]; then
-    export CC=/usr/bin/clang-15
-    export CXX=/usr/bin/clang++-15
+    export CC=/usr/bin/clang-17
+    export CXX=/usr/bin/clang++-17
   fi
   if [[ $# -ne 0 ]]; then
     for cmd in "$@"; do
@@ -354,8 +361,8 @@ function install_apt_deps {
     echo "All dependencies for Velox installed!"
     if [[ ${USE_CLANG} != "false" ]]; then
       echo "To use clang for the Velox build set the CC and CXX environment variables in your session."
-      echo "  export CC=/usr/bin/clang-15"
-      echo "  export CXX=/usr/bin/clang++-15"
+      echo "  export CC=/usr/bin/clang-17"
+      echo "  export CXX=/usr/bin/clang++-17"
     fi
     if [[ ${VERSION} =~ "20.04" && ${USE_CLANG} == "false" ]]; then
       echo "To build Velox gcc-11/g++11 is required. Set the CC and CXX environment variables in your session."
