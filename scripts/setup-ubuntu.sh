@@ -65,6 +65,7 @@ function install_clang15 {
 }
 
 function install_clang17 {
+  ${SUDO} apt install lsb-release wget software-properties-common gnupg
   wget https://apt.llvm.org/llvm.sh
   chmod +x llvm.sh
   ${SUDO} ./llvm.sh 17
