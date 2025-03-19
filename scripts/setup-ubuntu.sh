@@ -65,11 +65,12 @@ function install_clang15 {
 }
 
 function install_clang17 {
-  ${SUDO} apt install lsb-release wget software-properties-common gnupg
+  mkdir -p clang17 && cd clang17 
+  ${SUDO} apt install lsb-release wget software-properties-common gnupg -y
   wget https://apt.llvm.org/llvm.sh
   chmod +x llvm.sh
   ${SUDO} ./llvm.sh 17
-  ${SUDO} apt install llvm-17 llvm-17-dev llvm-17-runtime clang-17 lldb-17 lld-17
+  ${SUDO} apt install llvm-17 llvm-17-dev llvm-17-runtime clang-17 lldb-17 lld-17 -y
 }
 
 # For Ubuntu 20.04 we need add the toolchain PPA to get access to gcc11.
