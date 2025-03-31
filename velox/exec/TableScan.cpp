@@ -76,6 +76,7 @@ bool TableScan::shouldStop(StopReason taskStopReason) const {
       taskStopReason != StopReason::kYield;
 }
 
+// sourceOperator没有addInput，只有getOutput
 RowVectorPtr TableScan::getOutput() {
   auto exitCurStatusGuard = folly::makeGuard([this]() { curStatus_ = ""; });
 
@@ -93,9 +94,11 @@ RowVectorPtr TableScan::getOutput() {
     return nullptr;
   }
 
+  // 整体流程是一个死循环
   curStatus_ = "getOutput: enter";
   const auto startTimeMs = getCurrentTimeMs();
   for (;;) {
+    // 1. 检查是否需要stop或者yield
     // Check if our Task needs us to yield or we've been running for too long
     // w/o producing a result. In this case we return with the Yield blocking
     // reason and an already fulfilled future.
@@ -111,10 +114,12 @@ RowVectorPtr TableScan::getOutput() {
       return nullptr;
     }
 
+    // 2. 尝试从connector加载数据，创建split。如果是异步的，这里会block
     if (needNewSplit_) {
       // A point for test code injection.
       TestValue::adjust("facebook::velox::exec::TableScan::getOutput", this);
 
+      // 2.1 创建split
       exec::Split split;
       curStatus_ = "getOutput: task->getSplitOrFuture";
       blockingReason_ = driverCtx_->task->getSplitOrFuture(
@@ -128,6 +133,7 @@ RowVectorPtr TableScan::getOutput() {
         return nullptr;
       }
 
+      // 2.2 如果connector里已经没有待加载数据，设置 noMoreSplits，scan结束
       if (!split.hasConnectorSplit()) {
         noMoreSplits_ = true;
         dynamicFilters_.clear();
@@ -152,6 +158,8 @@ RowVectorPtr TableScan::getOutput() {
       if (FOLLY_UNLIKELY(splitTracer_ != nullptr)) {
         splitTracer_->write(split);
       }
+
+      // 2.3 创建split，重置标记 needNewSplit_
       const auto& connectorSplit = split.connectorSplit;
       currentSplitWeight_ = connectorSplit->splitWeight;
       needNewSplit_ = false;
@@ -165,6 +173,7 @@ RowVectorPtr TableScan::getOutput() {
           connectorSplit->connectorId,
           "Got splits with different connector IDs");
 
+      // 2.4 初始化 dataSource_
       if (dataSource_ == nullptr) {
         curStatus_ = "getOutput: creating dataSource_";
         connectorQueryCtx_ = operatorCtx_->createConnectorQueryCtx(
@@ -174,6 +183,7 @@ RowVectorPtr TableScan::getOutput() {
             tableHandle_,
             columnHandles_,
             connectorQueryCtx_.get());
+        // 如果算子上有 dynamic filter，下推到 dataSource里
         for (const auto& entry : dynamicFilters_) {
           dataSource_->addDynamicFilter(entry.first, entry.second);
         }
@@ -190,6 +200,9 @@ RowVectorPtr TableScan::getOutput() {
            },
            &debugString_});
 
+      // 2.5 如果
+      // connectorSplit里关联了预加载的datasource，那么复制给算子的datasource_；否则把connectorSplit加到
+      // datasource_里
       if (connectorSplit->dataSource != nullptr) {
         curStatus_ = "getOutput: preloaded split";
         ++numPreloadedSplits_;
@@ -220,6 +233,7 @@ RowVectorPtr TableScan::getOutput() {
       curStatus_ = "getOutput: updating stats_.numSplits";
       ++stats_.wlock()->numSplits;
 
+      // 2.6 估算batch size
       curStatus_ = "getOutput: dataSource_->estimatedRowSize";
       const auto estimatedRowSize = dataSource_->estimatedRowSize();
       readBatchSize_ =
@@ -247,6 +261,7 @@ RowVectorPtr TableScan::getOutput() {
           maxReadBatchSize_,
           static_cast<int32_t>(readBatchSize / maxFilteringRatio_));
     }
+    // 3. 调用 dataSource_->next 读取一个batch的数据
     curStatus_ = "getOutput: dataSource_->next";
     uint64_t ioTimeUs{0};
     std::optional<RowVectorPtr> dataOptional;
@@ -255,8 +270,10 @@ RowVectorPtr TableScan::getOutput() {
       dataOptional = dataSource_->next(readBatchSize, blockingFuture_);
     }
 
+    // 准备好split预加载器
     curStatus_ = "getOutput: checkPreload";
     checkPreload();
+
     {
       curStatus_ = "getOutput: updating stats_.dataSourceReadWallNanos";
       auto lockedStats = stats_.wlock();

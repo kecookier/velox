@@ -272,6 +272,7 @@ TypePtr updateColumnNamesImpl(
 }
 } // namespace
 
+// 用fileSchema的类型 + tableSchema的列名。 如果 recurisive=true，复杂类型内部的子类型也进行这样的替换。 针对 ORC文件，Gluten里 recurisive=false。
 TypePtr Reader::updateColumnNames(
     const TypePtr& fileType,
     const TypePtr& tableType) {

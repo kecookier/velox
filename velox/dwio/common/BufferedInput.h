@@ -26,6 +26,7 @@ DECLARE_bool(wsVRLoad);
 
 namespace facebook::velox::dwio::common {
 
+// DwrfReader 持有 BufferedInput 的实例，说明负责单个文件的读取
 class BufferedInput {
  public:
   constexpr static uint64_t kMaxMergeDistance = 1024 * 1024 * 1.25;
@@ -233,6 +234,7 @@ class BufferedInput {
       folly::Range<char*> allocated,
       const LogType logType);
 
+  // offsets_ 和 buffers_ 一起才能定位某个 Region(offset, length)
   folly::Range<char*> allocate(const velox::common::Region& region) {
     // Save the file offset and the buffer to which we'll read it
     offsets_.push_back(region.offset);
@@ -266,6 +268,7 @@ class BufferedInput {
   // Maps the position in which the Region was originally enqueued to the
   // position that it went to after sorting and merging. Thus this maps from the
   // enqueued position to its corresponding buffer offset.
+  // 经过sort和merge之后，记录映射<i,j>， origin_regions_[i] => cur_regions[j]
   std::vector<size_t> enqueuedToBufferOffset_;
 };
 

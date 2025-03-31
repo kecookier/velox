@@ -52,8 +52,11 @@ class HiveTableHandle;
 class HiveColumnHandle;
 class HiveConfig;
 
+// connector层读取hive数据分片的class。
+// SplitReader负责根据表信息创建文件的reader，是表和文件中间的纽带
 class SplitReader {
  public:
+// 工厂
   static std::unique_ptr<SplitReader> create(
       const std::shared_ptr<hive::HiveConnectorSplit>& hiveSplit,
       const std::shared_ptr<const HiveTableHandle>& hiveTableHandle,

@@ -429,6 +429,9 @@ class RowReaderOptions {
   std::shared_ptr<FormatSpecificOptions> formatSpecificOptions_;
 };
 
+// 单个文件的 ReaderOption 还继承了 io::ReaderOptions
+// dwio::common::ReaderOptions 包括读 dwio相关文件格式的读取配置
+// io::ReaderOptions 通用io相关的读取配置
 /// Options for creating a Reader.
 class ReaderOptions : public io::ReaderOptions {
  public:
@@ -600,18 +603,18 @@ class ReaderOptions : public io::ReaderOptions {
   }
 
  private:
-  uint64_t tailLocation_;
-  FileFormat fileFormat_;
-  RowTypePtr fileSchema_;
-  SerDeOptions serDeOptions_;
-  std::shared_ptr<encryption::DecrypterFactory> decrypterFactory_;
-  uint64_t footerEstimatedSize_{kDefaultFooterEstimatedSize};
-  uint64_t filePreloadThreshold_{kDefaultFilePreloadThreshold};
-  bool fileColumnNamesReadAsLowerCase_{false};
-  bool useColumnNamesForColumnMapping_{false};
-  std::shared_ptr<folly::Executor> ioExecutor_;
-  std::shared_ptr<random::RandomSkipTracker> randomSkip_;
-  std::shared_ptr<velox::common::ScanSpec> scanSpec_;
+  uint64_t tailLocation_; // 没用上
+  FileFormat fileFormat_; // 默认 FileFormat::UNKNOWN
+  RowTypePtr fileSchema_; // 表的schema，因此当发生schema evolution的时候，这个schema和文件实际的schema可能不同
+  SerDeOptions serDeOptions_; // dwrf/orc/parquet 没用上
+  std::shared_ptr<encryption::DecrypterFactory> decrypterFactory_; // 没用上
+  uint64_t footerEstimatedSize_{kDefaultFooterEstimatedSize}; // 估计的footer大小，用于设置input的buffer大小。 hiveconfig里footerEstimatedSize()设置了256KB
+  uint64_t filePreloadThreshold_{kDefaultFilePreloadThreshold}; // 如果文件大小小于这个值(8MB)，则一次把整个文件读到buffer里；否则按部就班从footer解析。
+  bool fileColumnNamesReadAsLowerCase_{false}; // true: 忽略schema中列名的大小写，都用小写匹配
+  bool useColumnNamesForColumnMapping_{false}; // true: 解析root层文件字段时，按照列名去解析字段值; false: 按照index解析
+  std::shared_ptr<folly::Executor> ioExecutor_; // TODO:zhaokuo
+  std::shared_ptr<random::RandomSkipTracker> randomSkip_; // 采样下推专用
+  std::shared_ptr<velox::common::ScanSpec> scanSpec_; // TODO:zhaokuo
   const tz::TimeZone* sessionTimezone_{nullptr};
   bool adjustTimestampToTimezone_{false};
   bool selectiveNimbleReaderEnabled_{false};

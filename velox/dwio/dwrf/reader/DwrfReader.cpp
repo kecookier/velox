@@ -799,6 +799,7 @@ DwrfReader::DwrfReader(
   // of the unit tests fail to provide it.
   if ((!readerBase_->readerOptions().useColumnNamesForColumnMapping()) &&
       (readerBase_->readerOptions().fileSchema() != nullptr)) {
+    // 用表的列名更新文件的列名，不更新列的类型
     updateColumnNamesFromTableSchema();
   }
 }

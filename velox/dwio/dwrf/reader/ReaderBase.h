@@ -217,6 +217,7 @@ class ReaderBase {
       std::unique_ptr<dwio::common::SeekableInputStream> compressed,
       const std::string& streamDebugInfo,
       const dwio::common::encryption::Decrypter* decrypter = nullptr) const {
+    // TODO(zhaokuo) 这里调用的是哪个 createDecompressor ?
     return createDecompressor(
         compressionKind(),
         std::move(compressed),
@@ -272,14 +273,14 @@ class ReaderBase {
 
   BufferPtr stripeMetadataCacheBuffer_;
   int32_t stripeMetadataCacheBufferSize_;
-  int32_t footerBufferOverread_;
+  int32_t footerBufferOverread_; // 读文件尾部时，因为不知道footer具体size，按照估计读了1MB，这个overHead表示除了footer以外，从后往前多读的部分
   std::unique_ptr<google::protobuf::Arena> arena_;
-  std::unique_ptr<PostScript> postScript_;
-  std::unique_ptr<FooterWrapper> footer_;
+  std::unique_ptr<PostScript> postScript_; // 封装 proto::PostScript 和 proto::orc::postscript
+  std::unique_ptr<FooterWrapper> footer_; // 类似PostScript，也是一个封装。因为要同时支持 dwrf和orc
   std::unique_ptr<encryption::DecryptionHandler> handler_;
   std::unique_ptr<StripeMetadataCache> cache_;
 
-  RowTypePtr schema_;
+  RowTypePtr schema_; // 文件内的schema
   // Lazily populated
   mutable std::shared_ptr<const dwio::common::TypeWithId> schemaWithId_;
   uint64_t psLength_;

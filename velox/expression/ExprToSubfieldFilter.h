@@ -412,6 +412,8 @@ inline std::unique_ptr<common::TimestampRange> greaterThanOrEqual(
       min, std::numeric_limits<Timestamp>::max(), nullAllowed);
 }
 
+// 从表达式里提取subfield和filter， 默认是 PrestoExprToSubfieldFilterParser，
+// Gluten里重写了 SparkExprToSubfieldFilterParser
 /// Provides the instance and helper functions to convert a leaf call
 /// expression to subfield filter. Allows the registration of custom parser.
 class ExprToSubfieldFilterParser {
@@ -430,6 +432,7 @@ class ExprToSubfieldFilterParser {
     parserFactory_ = std::move(parserFactory);
   }
 
+  // 从 CallTypedExpr 提取 common::Subfield 和 common::Filter，用于下推
   /// Converts a leaf call expression (no conjunction like AND/OR) to subfield
   /// and filter. Return nullptr if not supported for pushdown. This is needed
   /// because this conversion is frequently applied when extracting filters from

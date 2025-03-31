@@ -150,7 +150,7 @@ class IoStatistics {
   std::atomic<uint64_t> rawBytesWritten_{0};
   std::atomic<uint64_t> inputBatchSize_{0};
   std::atomic<uint64_t> outputBatchSize_{0};
-  std::atomic<uint64_t> rawOverreadBytes_{0};
+  std::atomic<uint64_t> rawOverreadBytes_{0}; // 合并region时，多读的空隙(gap)
   std::atomic<uint64_t> totalScanTime_{0};
   std::atomic<uint64_t> writeIOTimeUs_{0};
 

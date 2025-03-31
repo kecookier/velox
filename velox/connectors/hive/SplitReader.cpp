@@ -149,6 +149,7 @@ SplitReader::SplitReader(
 
 void SplitReader::configureReaderOptions(
     std::shared_ptr<velox::random::RandomSkipTracker> randomSkip) {
+  // 无效封装
   hive::configureReaderOptions(
       hiveConfig_,
       connectorQueryCtx_,
@@ -160,6 +161,8 @@ void SplitReader::configureReaderOptions(
   baseReaderOpts_.setFileFormat(hiveSplit_->fileFormat);
 }
 
+// 是一个init函数，使用者调用。 构造之后，调用 prepareSplit初始化 fileReader 和
+// fileRowReader
 void SplitReader::prepareSplit(
     std::shared_ptr<common::MetadataFilter> metadataFilter,
     dwio::common::RuntimeStatistics& runtimeStats) {
@@ -241,10 +244,12 @@ std::string SplitReader::toString() const {
       static_cast<const void*>(baseRowReader_.get()));
 }
 
+// 创建文件reader，目前支持 DwrfReader / OrcReader / ParquetReader
 void SplitReader::createReader() {
   VELOX_CHECK_NE(
       baseReaderOpts_.fileFormat(), dwio::common::FileFormat::UNKNOWN);
 
+  // TODO(zhaokuo) fileHandleFactory作用是什么？
   FileHandleCachedPtr fileHandleCachePtr;
   try {
     fileHandleCachePtr = fileHandleFactory_->generate(
@@ -335,6 +340,7 @@ void SplitReader::createRowReader(
   baseRowReader_ = baseReader_->createRowReader(baseRowReaderOpts_);
 }
 
+// TODO(zhaokuo) 这里适配的是什么？
 std::vector<TypePtr> SplitReader::adaptColumns(
     const RowTypePtr& fileType,
     const std::shared_ptr<const velox::RowType>& tableSchema) const {

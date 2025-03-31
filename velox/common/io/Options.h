@@ -48,6 +48,7 @@ constexpr uint64_t DEFAULT_AUTO_PRELOAD_SIZE =
  * at the cost of a second buffer.   The relative improvement would be greater
  * for cases where the network throughput is higher.
  */
+// dwio实际没用这个
 enum class PrefetchMode {
   NOT_SET = 0,
   PRELOAD = 1, // read a buffer of autoPreloadLength bytes on a read beyond the
@@ -56,6 +57,7 @@ enum class PrefetchMode {
                 // actual reads.
 };
 
+// 通用IO相关的读取配置，比如
 class ReaderOptions {
  public:
   static constexpr int32_t kDefaultLoadQuantum = 8 << 20; // 8MB
@@ -148,13 +150,21 @@ class ReaderOptions {
   }
 
  protected:
+  // 为什么要关联MemoryPool，这个不够通用了
   velox::memory::MemoryPool* memoryPool_;
+  // 预加载大小
   uint64_t autoPreloadLength_;
+  // 预取模式
   PrefetchMode prefetchMode_;
+  // 加载的额度
   int32_t loadQuantum_{kDefaultLoadQuantum};
+  // 允许合并的最大距离
   int32_t maxCoalesceDistance_{kDefaultCoalesceDistance};
+  // 允许合并的最大字节数量
   int64_t maxCoalesceBytes_{kDefaultCoalesceBytes};
+  // TODO(zhaokuo)
   int32_t prefetchRowGroups_{kDefaultPrefetchRowGroups};
+  // TODO(zhaokuo)
   bool noCacheRetention_{false};
 };
 } // namespace facebook::velox::io

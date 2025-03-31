@@ -159,6 +159,7 @@ class HiveDataSource : public DataSource {
   std::unordered_map<std::string, std::shared_ptr<HiveColumnHandle>>
       infoColumns_;
   SpecialColumnNames specialColumns_{};
+  // subfield是下推表达式的一种，针对嵌套类型的列，可以裁剪需要的子字段
   folly::F14FastMap<std::string, std::vector<const common::Subfield*>>
       subfields_;
   common::SubfieldFilters filters_;

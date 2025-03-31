@@ -73,6 +73,7 @@ HiveDataSource::HiveDataSource(
       pool_(connectorQueryCtx->memoryPool()),
       outputType_(outputType),
       expressionEvaluator_(connectorQueryCtx->expressionEvaluator()) {
+  // 设置分区字段
   // Column handled keyed on the column alias, the name used in the query.
   for (const auto& [canonicalizedName, columnHandle] : columnHandles) {
     auto handle = std::dynamic_pointer_cast<HiveColumnHandle>(columnHandle);
@@ -98,6 +99,11 @@ HiveDataSource::HiveDataSource(
     }
   }
 
+  // subfield是下推表达式的一种，
+  // 针对嵌套类型的列，可以裁剪需要的子字段。是否裁剪由connector决定。
+  // 按root列名保存到 subfields_[name] = subfield
+  // 下推之后，读表时会按照subfiled path裁剪需要的子字段。比如 colA:map<string,
+  // int>， 如果 subfield是 colA["3"]
   std::vector<std::string> readColumnNames;
   auto readColumnTypes = outputType_->children();
   for (const auto& outputName : outputType_->names()) {
@@ -118,6 +124,7 @@ HiveDataSource::HiveDataSource(
     }
   }
 
+  // 列名大小写检查
   hiveTableHandle_ = std::dynamic_pointer_cast<HiveTableHandle>(tableHandle);
   VELOX_CHECK_NOT_NULL(
       hiveTableHandle_, "TableHandle must be an instance of HiveTableHandle");
@@ -128,7 +135,11 @@ HiveDataSource::HiveDataSource(
     checkColumnNameLowerCase(hiveTableHandle_->remainingFilter());
   }
 
+  // 当前这部分逻辑已经废弃，Gluten生成hiveTableHandle时，不再传入subfieldFilters，只传入表达式
+  // remainFilter， 调用 extractFiltersFromRemainingFilter 再提取 subfield 和
+  // filter
   for (const auto& [k, v] : hiveTableHandle_->subfieldFilters()) {
+    // root层的列下推filter保存到filters_
     filters_.emplace(k.clone(), v->clone());
   }
   double sampleRate = 1;
@@ -298,6 +309,7 @@ void HiveDataSource::setupRowIdColumn() {
           connectorQueryCtx_->memoryPool());
 }
 
+// 创建splitReader，HiveDataSource持有一个splitReader，每次addSplit都会重新创建该splitReader
 void HiveDataSource::addSplit(std::shared_ptr<ConnectorSplit> split) {
   VELOX_CHECK_NULL(
       split_,
@@ -321,9 +333,11 @@ void HiveDataSource::addSplit(std::shared_ptr<ConnectorSplit> split) {
   }
 
   splitReader_ = createSplitReader();
+  // 坏味道，下面两个函数应该封装成 splitReader->init()
   // Split reader subclasses may need to use the reader options in prepareSplit
   // so we initialize it beforehand.
   splitReader_->configureReaderOptions(randomSkip_);
+  // 内部会创建好读取文件的reader(dwrf/orc/parquet)
   splitReader_->prepareSplit(metadataFilter_, runtimeStats_);
   readerOutputType_ = splitReader_->readerOutputType();
 }
@@ -367,6 +381,7 @@ vector_size_t HiveDataSource::applyBucketConversion(
   return size;
 }
 
+// 读取一个batch的数据
 std::optional<RowVectorPtr> HiveDataSource::next(
     uint64_t size,
     velox::ContinueFuture& /*future*/) {

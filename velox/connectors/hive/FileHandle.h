@@ -33,6 +33,7 @@
 
 namespace facebook::velox {
 
+// 文件句柄，包含文件路径等信息
 // See the file comment.
 struct FileHandle {
   std::shared_ptr<ReadFile> file;

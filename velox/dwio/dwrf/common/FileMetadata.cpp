@@ -67,6 +67,7 @@ TypeKind TypeWrapper::kind() const {
     }
   }
 
+  // 把proto::orc里定义的type_kind映射到velox::TypeKind，针对primitive类型居然是强转，这就要求两边枚举值顺序一样
   switch (orcPtr()->kind()) {
     case proto::orc::Type_Kind_BOOLEAN:
     case proto::orc::Type_Kind_BYTE:
