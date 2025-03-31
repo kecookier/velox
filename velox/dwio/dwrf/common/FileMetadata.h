@@ -48,6 +48,7 @@ class ProtoWrapperBase {
   const void* const impl_;
 };
 
+// 因为dwio要同时支持dwrf和orc，因此用PostScript封装具体的protobuf里的PostScript，持有基类protobuf::Message指针作为 impl_
 /***
  * PostScript that takes the ownership of proto::PostScript /
  *proto::orc::PostScript and provides access to the attributes

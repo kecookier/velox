@@ -115,7 +115,7 @@ class TableScan : public SourceOperator {
   ContinueFuture blockingFuture_{ContinueFuture::makeEmpty()};
   BlockingReason blockingReason_{BlockingReason::kNotBlocked};
   int64_t currentSplitWeight_{0};
-  bool needNewSplit_ = true;
+  bool needNewSplit_ = true; // 触发从connector加载数据，默认是true
   std::shared_ptr<connector::ConnectorQueryCtx> connectorQueryCtx_;
   std::unique_ptr<connector::DataSource> dataSource_;
   bool noMoreSplits_ = false;

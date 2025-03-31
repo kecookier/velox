@@ -266,6 +266,8 @@ void Driver::initializeOperators() {
   }
 }
 
+// pipeline执行过程中，把
+// operatorIndex算子的动态过滤器下推到上游算子，通过遍历的形式。直到source算子
 void Driver::pushdownFilters(int operatorIndex) {
   auto* op = operators_[operatorIndex].get();
   const auto& filters = op->getDynamicFilters();
@@ -293,6 +295,7 @@ void Driver::pushdownFilters(int operatorIndex) {
         break;
       }
 
+      // ????
       const auto& identityProjections = prevOp->identityProjections();
       const auto inputChannel =
           getIdentityProjection(identityProjections, channel);

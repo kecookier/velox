@@ -106,6 +106,8 @@ class SeekableArrayInputStream : public SeekableInputStream {
 /**
  * Create a seekable input stream based on an io stream.
  */
+// 带有buffer的输入流，Next时，每次把一个chunk的数据从文件里加载到 buffer_。
+// 支持游标回退
 class SeekableFileInputStream : public SeekableInputStream {
  public:
   SeekableFileInputStream(

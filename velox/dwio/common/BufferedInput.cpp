@@ -44,6 +44,9 @@ uint64_t BufferedInput::nextFetchSize() const {
       });
 }
 
+// enqueue...load模式: 把regions_里所有的 region 从文件加载到 buffers_。
+// 首先清空 buffers_ 和 offsets_，然后对 regions_
+// 排序和合并，得到准确的大小，然后为每个region申请内存，把region的数据加载到buffers_中。
 void BufferedInput::load(const LogType logType) {
   // no regions to load
   if (regions_.size() == 0) {
@@ -61,7 +64,13 @@ void BufferedInput::load(const LogType logType) {
   offsets_.reserve(regions_.size());
   buffers_.reserve(regions_.size());
 
+  // 如果文件系统支持向量化读取，一次并行读取所有regions，否则顺序读取。读取之前为每个regions申请内存，以folly::Range的形式保存到
+  // buffers_ 里。
+  // 并行读取: 调用 FileReadInputStream::vread 把每个Region的数据加载到
+  // folly::IOBuf， 然后再拷贝到内存
+  // 加载完成之后，清空queue regions_
   if (useVRead()) {
+    LOG(INFO) << "use vread";
     // Now we have all buffers and regions, load it in parallel
     std::vector<folly::IOBuf> iobufs(regions_.size());
     input_->vread(regions_, {iobufs.data(), iobufs.size()}, logType);
@@ -78,6 +87,7 @@ void BufferedInput::load(const LogType logType) {
   regions_.clear();
 }
 
+// 调用 FileReadInputStream::read() 把单个Region的数据加载到folly::Range里
 void BufferedInput::readToBuffer(
     uint64_t offset,
     folly::Range<char*> allocated,
@@ -93,6 +103,7 @@ void BufferedInput::readToBuffer(
   }
 }
 
+// 如果使用 enqueue...load 模式时，enqueue记录用请求的region
 std::unique_ptr<SeekableInputStream> BufferedInput::enqueue(
     Region region,
     const dwio::common::StreamIdentifier* /*sid*/) {
@@ -133,6 +144,7 @@ bool BufferedInput::useVRead() const {
 }
 
 // Sort regions and enqueuedToOffset in the same way
+// 借助 enqueuedToBufferOffset_ 做sort和merge
 void BufferedInput::sortRegions() {
   auto& r = regions_;
   auto& e = enqueuedToBufferOffset_;
@@ -158,6 +170,60 @@ void BufferedInput::sortRegions() {
   std::swap(r, regions);
 }
 
+/*
+把数组展开成hashtable的形式，更容易理解merge过程。
+Merge完成之后，regions_ 保留merge之后的region， enqueuedToBufferOffset_
+标记那几个region被合并了。
+
+regions:
+<0, {6,3}>
+<1, {24,3}>
+<2, {3,3}>
+<3, {0,3}>
+<4, {29,3}>
+
+after sort:
+enqueuedToBufferOffset_:
+<0, 3>
+<1, 2>
+<2, 0>
+<3, 1>
+<4, 4>
+
+regions:
+<3, {0,3}>
+<2, {3,3}>
+<0, {6,3}>
+<1, {24,3}>
+<4, {29,3}>
+=>
+<0, {0,3}>
+<1, {3,3}>
+<2, {6,3}>
+<3, {24,3}>
+<4, {29,3}>
+
+when merge:
+te[e[0]] = 0  <3, 0>
+
+ia = 0,ib = 1; te[e[1]] = 0  <3, 0> <2, 0>
+ia = 0,ib = 2; te[e[2]] = 0  <3, 0> <2, 0> <0, 0>
+ia = 0,ib = 3; r[1] = r[3], te[e[3]] = 1  <3, 0> <2, 0> <0, 0> <1,1>
+ia = 1,ib = 4; r[2] = r[4], te[e[4]] = 2 <3, 0> <2, 0> <0, 0> <1,1> <4, 2>
+te[e[2]] = te[0] = 0
+
+regions:
+<0, {0,9}>
+<1, {24,3}>
+<2, {29,3}>
+
+swap(te, enqueuedToBufferOffset_)
+<0, 0>
+<1, 1>
+<2, 0>
+<3, 0>
+<4, 2>
+*/
 void BufferedInput::mergeRegions() {
   auto& r = regions_;
   VELOX_CHECK(!r.empty(), "Assumes that there's at least one region");
@@ -188,6 +254,11 @@ void BufferedInput::mergeRegions() {
   std::swap(e, te);
 }
 
+// 向量化读只有完全重复的region可以合并
+// 合并算法：例如合并a和b，已知b在a后边，gap表示b的起始位置和,a的末尾的差值。extension
+// 表示合并后a要扩展多少长度。
+//  如果 gap>0，有空隙； gap==0：没空隙； gap<0：b的起始地址在a里
+//  如果 extension<0，b在a里； extension==0，a和b一样；
 bool BufferedInput::tryMerge(Region& first, const Region& second) {
   VELOX_CHECK_GE(second.offset, first.offset, "regions should be sorted.");
   const int64_t gap = second.offset - first.offset - first.length;
@@ -224,6 +295,8 @@ std::unique_ptr<SeekableInputStream> BufferedInput::readBuffer(
   return std::make_unique<SeekableArrayInputStream>(std::get<0>(result), size);
 }
 
+// 尝试从 buffers_ 里读取需求数据[offset, offset+length]。
+// offsets_数组是有序的，二分查找找到offset所在的buffer。如果buffer完全包含所需数据，返回buffer的起始地址和长度。
 std::tuple<const char*, uint64_t> BufferedInput::readInternal(
     uint64_t offset,
     uint64_t length,
@@ -241,6 +314,8 @@ std::tuple<const char*, uint64_t> BufferedInput::readInternal(
     // have the values from a previous load. So I want to make sure that he ends
     // up in a valid offset, and that this offset is <= offset. Otherwise we
     // just go for the binary search.
+    // 调用 enqueue之后，没有load，而是 read。 这时候 buffers 保留的是上次
+    // enqueue...load 组合的数据。
     if (vi < enqueuedToBufferOffset_.size() &&
         enqueuedToBufferOffset_[vi] < offsets_.size() &&
         offsets_[enqueuedToBufferOffset_[vi]] <= offset) {

@@ -69,5 +69,47 @@ int main(int argc, char** argv) {
     }
   }
 
+  // readerOption里设置 tableSchema， 然后再读取测试。结果就会错误。
+  // decimal类型在orc里是如何保存的？ 用字符串保存吗？
+  // orc的fileSchema如何生成的？ dwrfReader生成的吗?
+
+  std::vector<std::string> names;
+  names.reserve(schema.size());
+  std::vector<TypePtr> types;
+  types.reserve(schema.size());
+
+  for (auto i = 0; i < schema.size(); ++i) {
+    if (name == "duration") {
+      auot type = schema[i]->type();
+      dynamic_cast<>
+
+    } else {
+      names.push_back(schema[i]->name());
+      types.push_back(schema[i]->type());
+    }
+  }
+
+  for (auto& handle : split_->bucketConversion->bucketColumnHandles) {
+    VELOX_CHECK(handle->columnType() == HiveColumnHandle::ColumnType::kRegular);
+    if (subfields_.erase(handle->name()) > 0) {
+      rebuildScanSpec = true;
+    }
+    auto index = readerOutputType_->getChildIdxIfExists(handle->name());
+    if (!index.has_value()) {
+      if (names.empty()) {
+        names = readerOutputType_->names();
+        types = readerOutputType_->children();
+      }
+      index = names.size();
+      names.push_back(handle->name());
+      types.push_back(hiveTableHandle_->dataColumns()->findChild(handle->name()));
+      rebuildScanSpec = true;
+    }
+    bucketChannels.push_back(*index);
+  }
+  if (!names.empty()) {
+    readerOutputType_ = ROW(std::move(names), std::move(types));
+  }
+
   return 0;
 }

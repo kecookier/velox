@@ -552,6 +552,7 @@ void configureReaderOptions(
       readerOptions);
 }
 
+// 设置file read的 options，用于初始化单个文件reader
 void configureReaderOptions(
     const std::shared_ptr<const HiveConfig>& hiveConfig,
     const ConnectorQueryCtx* connectorQueryCtx,

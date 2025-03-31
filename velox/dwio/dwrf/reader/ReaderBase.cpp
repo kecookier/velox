@@ -102,6 +102,7 @@ std::unique_ptr<FooterWrapper> parseFooter(
 
 } // namespace
 
+// ReaderBase构造时从
 ReaderBase::ReaderBase(
     const dwio::common::ReaderOptions& options,
     std::unique_ptr<dwio::common::BufferedInput> input)
@@ -114,6 +115,7 @@ ReaderBase::ReaderBase(
   DWIO_ENSURE(fileLength_ > 0, "ORC file is empty");
   VELOX_CHECK_GE(fileLength_, 4, "File size too small");
 
+  // 如果文件大小小于阈值，则预加载整个文件，否则加载文件末尾的1MB(默认估计的footer大小是1MB，实际包含 postscript+footer)
   const auto preloadFile = fileLength_ <= options_.filePreloadThreshold();
   const int64_t footerBufSize =
       std::min(fileLength_, options_.footerEstimatedSize());
@@ -123,12 +125,15 @@ ReaderBase::ReaderBase(
     input_->load(preloadFile ? LogType::FILE : LogType::FOOTER);
   }
 
+  // input加载的数据读到footerBuffer里
   // TODO: read footer from spectrum
   auto footerBuffer =
       AlignedBuffer::allocate<char>(footerBufSize, &options_.memoryPool());
   auto* rawFooterBuffer = footerBuffer->asMutable<char>();
   input_->read(fileLength_ - footerBufSize, footerBufSize, LogType::FOOTER)
       ->readFully(rawFooterBuffer, footerBufSize);
+
+  // 1. 解析最后一个字节，做为postScriptLength
   int32_t footerOffset = footerBufSize - 1;
   psLength_ = static_cast<uint8_t>(rawFooterBuffer[footerOffset]);
   VELOX_CHECK_LE(
@@ -136,6 +141,7 @@ ReaderBase::ReaderBase(
       fileLength_,
       "Corrupted file, Post script size is invalid");
 
+  // 2. 移动footerOffset到postScript起始位置，解析postScript_。 文件数据格式是protobuf序列化之后的格式。调用protobuf的反序列化接口生成具体的 postScript对象。 postScript是没有压缩的
   VELOX_CHECK_GE(footerOffset, psLength_);
   footerOffset -= psLength_;
   if (fileFormat() == FileFormat::DWRF) {
@@ -146,6 +152,7 @@ ReaderBase::ReaderBase(
         rawFooterBuffer + footerOffset, psLength_);
   }
 
+  // 3. postScript里获取 footerSize，计算除了footer以外，往前多读的大小 footerBufferOverread_
   const uint64_t footerSize = postScript_->footerLength();
   const uint64_t cacheSize =
       postScript_->hasCacheSize() ? postScript_->cacheSize() : 0;
@@ -169,11 +176,13 @@ ReaderBase::ReaderBase(
       "Corrupted File, invalid compression kind ",
       postScript_->compression());
 
+  // 4. 如果一开始估计的footerSize小了，就把剩下的footer也load进来
   if (input_->supportSyncLoad() && (tailSize > readSize)) {
     input_->enqueue({fileLength_ - tailSize, tailSize, "footer"});
     input_->load(LogType::FOOTER);
   }
 
+  // 5. 把完整的footer数据拼到一起，根据第一次多读还是少读，看是否要拼接两次的buffer，处理之后， footerStart指向footer的起始地址指针
   BufferPtr fullFooterBuffer;
   char* footerStart;
   if (footerOffset >= footerSize) {
@@ -183,6 +192,7 @@ ReaderBase::ReaderBase(
     fullFooterBuffer =
         AlignedBuffer::allocate<char>(footerSize, &options_.memoryPool());
     footerStart = fullFooterBuffer->asMutable<char>();
+    // 第一次少读了 remainingBytes，要再读这么多数据出来
     auto remainingBytes = footerSize - footerOffset;
     input_
         ->read(
@@ -190,9 +200,13 @@ ReaderBase::ReaderBase(
             remainingBytes,
             LogType::FOOTER)
         ->readFully(footerStart, remainingBytes);
+    // 再把第一次读的部分footer数据拼到 fullFooterBuffer 里
     ::memcpy(footerStart + remainingBytes, rawFooterBuffer, footerOffset);
     footerOffset = 0;
   }
+
+  // 6. 解析footer。 先解压，然后在反序列化成 proto::Footer/proto::orc::Footer，类似postScript。 区别是footer是调用 ParseFromZeroCopyStream，从流里反序列化的； PostScript直接从ParseFromArray反序列化。
+  // TODO(zhaokuo) 这里需要搞懂涉及到的几个stream类型以及具体的行为异同。
   auto decompressed = createDecompressedStream(
       std::make_unique<dwio::common::SeekableArrayInputStream>(
           footerStart, footerSize),
@@ -206,6 +220,7 @@ ReaderBase::ReaderBase(
   stripeMetadataCacheBuffer_ = footerBuffer;
   stripeMetadataCacheBufferSize_ = footerOffset;
 
+  // 7. 从footer_里获取file schema
   schema_ = std::dynamic_pointer_cast<const RowType>(
       convertType(*footer_, 0, options_.fileColumnNamesReadAsLowerCase()));
   VELOX_CHECK_NOT_NULL(schema_, "invalid schema");
@@ -226,6 +241,8 @@ void ReaderBase::loadCache() {
       postScript_->hasCacheSize() ? postScript_->cacheSize() : 0;
   const uint64_t tailSize = 1 + psLength_ + footerSize + cacheSize;
   if (cacheSize > 0) {
+    // 根据代码逻辑，可以推断出dwrf文件的layout，相比与orc，dwrf的footer前面多了 Stripe metadata cache，
+    // 可以缓存 strip index和 strip footer，后边读取stripe时如果命中这个cahce，就不用多读一次文件了
     VELOX_CHECK_EQ(format(), DwrfFormat::kDwrf);
     const uint64_t cacheOffset = fileLength_ - tailSize;
     if (input_->shouldPrefetchStripes()) {
@@ -255,6 +272,7 @@ void ReaderBase::loadCache() {
           postScript_->cacheMode(), *footer_, std::move(cacheBuffer));
     }
   }
+  // orc文件会走到这里，是否预取stripe footer， DirectBufferInput和BufferInput 不会预取， CachedBufferInput会预取
   if (!cache_ && input_->shouldPrefetchStripes()) {
     const auto numStripes = footer().stripesSize();
     for (auto i = 0; i < numStripes; i++) {
@@ -333,6 +351,7 @@ std::shared_ptr<const Type> ReaderBase::convertType(
       index,
       folly::to<uint32_t>(footer.typesSize()),
       "Corrupted file, invalid types");
+  // types()函数会把index对应的typekind从proto里转成Velox TypeKind。 dwrf格式不支持decimal
   const auto type = footer.types(index);
   switch (type.kind()) {
     case TypeKind::BOOLEAN:
@@ -346,6 +365,7 @@ std::shared_ptr<const Type> ReaderBase::convertType(
     case TypeKind::BIGINT:
       if (type.format() == DwrfFormat::kOrc &&
           type.getOrcPtr()->kind() == proto::orc::Type_Kind_DECIMAL) {
+        LOG(INFO) << "convertType ShortDecimal name:" << type.fieldNames(0) << " precision:" << type.getOrcPtr()->precision() << " scale:" << type.getOrcPtr()->scale();
         return DECIMAL(
             type.getOrcPtr()->precision(), type.getOrcPtr()->scale());
       }
@@ -353,6 +373,7 @@ std::shared_ptr<const Type> ReaderBase::convertType(
     case TypeKind::HUGEINT:
       if (type.format() == DwrfFormat::kOrc &&
           type.getOrcPtr()->kind() == proto::orc::Type_Kind_DECIMAL) {
+        LOG(INFO) << "convertType LongDecimal name:" << type.fieldNames(0) << " precision:" << type.getOrcPtr()->precision() << " scale:" << type.getOrcPtr()->scale();
         return DECIMAL(
             type.getOrcPtr()->precision(), type.getOrcPtr()->scale());
       }

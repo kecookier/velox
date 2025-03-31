@@ -29,6 +29,8 @@ using cache::CoalescedLoad;
 using cache::ScanTracker;
 using cache::TrackingId;
 
+// 和BufferedInput 不同之处在于， 用 LoadRequest 替代了 Region， 包含额外信息
+// trackingId和DirectInputStream
 std::unique_ptr<SeekableInputStream> DirectBufferedInput::enqueue(
     Region region,
     const StreamIdentifier* sid = nullptr) {

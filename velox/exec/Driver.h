@@ -527,6 +527,7 @@ class Driver : public std::enable_shared_from_this<Driver> {
 
   void close();
 
+  // 下推 动态过滤器 到指定算子，谓词下推的一种
   // Push down dynamic filters produced by the operator at the specified
   // position in the pipeline.
   void pushdownFilters(int operatorIndex);

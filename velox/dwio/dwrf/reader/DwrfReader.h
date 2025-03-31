@@ -42,6 +42,7 @@ class DwrfOptions : public dwio::common::FormatSpecificOptions {
   std::shared_ptr<ColumnReaderFactory> columnReaderFactory_;
 };
 
+// 从列存文件里读取一定行的数据
 class DwrfRowReader : public StrideIndexProvider,
                       public StripeReaderBase,
                       public dwio::common::RowReader {

@@ -19,6 +19,7 @@
 
 namespace facebook::velox::exec {
 
+// 封装 ConnectorSplit，表示一个文件
 struct Split {
   std::shared_ptr<velox::connector::ConnectorSplit> connectorSplit;
   int32_t groupId{-1}; // Bucketed group id (-1 means 'none').
