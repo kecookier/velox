@@ -69,6 +69,7 @@ class TreeIterator {
   size_t idx_;
 };
 
+// Tree实现了迭代器模式，其子类可以用作 for(const auto& v : tree) {}  左遍历
 template <typename T>
 class Tree {
  public:

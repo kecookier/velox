@@ -182,17 +182,24 @@ class DwrfRowReader : public StrideIndexProvider,
       decodingTimeCallback_;
 
   // footer
+  // 每个stripe里第一行在文件里的offset
   std::vector<uint64_t> firstRowOfStripe_;
   mutable std::shared_ptr<const dwio::common::TypeWithId> selectedSchema_;
 
   // reading state
+  // 从文件开头到当前正在读的位置，有多少行
   uint64_t previousRow_;
+  // 第一个读取的stripe的下标
   uint32_t firstStripe_;
+  // 当前正在读取的stripe下标
   uint32_t currentStripe_;
   // The the stripe AFTER the last one that should be read. e.g. if the highest
   // stripe in the RowReader's bounds is 3, then stripeCeiling_ is 4.
+  // 最后一个在范围内的stripe，的下一个stripe下标
   uint32_t stripeCeiling_;
+  // 当前stripe中已读取的行数
   uint64_t currentRowInStripe_;
+  // 当前stripe里有多少行
   uint64_t rowsInCurrentStripe_;
   uint64_t strideIndex_;
 

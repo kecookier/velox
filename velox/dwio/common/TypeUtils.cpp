@@ -102,6 +102,8 @@ uint32_t getKey(TypeKind from, TypeKind to) {
 
 std::unordered_set<uint32_t> makeCompatibilityMap() {
   std::unordered_set<uint32_t> compat;
+  // <from, to>
+  // TODO(zhaokuo) support decimal 2 decimal
   compat.insert(getKey(TypeKind::BOOLEAN, TypeKind::TINYINT));
   compat.insert(getKey(TypeKind::BOOLEAN, TypeKind::SMALLINT));
   compat.insert(getKey(TypeKind::BOOLEAN, TypeKind::INTEGER));

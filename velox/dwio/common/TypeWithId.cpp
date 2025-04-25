@@ -98,15 +98,17 @@ const std::shared_ptr<const TypeWithId>& TypeWithId::childAt(
   return children_.at(idx);
 }
 
+// 根据schema创建id时，参数next和column都是0
 std::unique_ptr<TypeWithId> TypeWithId::create(
     const std::shared_ptr<const Type>& type,
     uint32_t& next,
     uint32_t column) {
   DWIO_ENSURE_NOT_NULL(type);
   const uint32_t myId = next++;
+  // 为子类型生成TypeWithId
   std::vector<std::unique_ptr<TypeWithId>> children;
   children.reserve(type->size());
-  auto offset = 0;
+  auto offset = 0; // 表示子类型的column index
   for (const auto& child : *type) {
     children.emplace_back(create(
         child,

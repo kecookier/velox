@@ -279,8 +279,8 @@ class ReaderBase {
   std::unique_ptr<FooterWrapper> footer_; // 类似PostScript，也是一个封装。因为要同时支持 dwrf和orc
   std::unique_ptr<encryption::DecryptionHandler> handler_;
   std::unique_ptr<StripeMetadataCache> cache_;
-
-  RowTypePtr schema_; // 文件内的schema
+  // file schema
+  RowTypePtr schema_;
   // Lazily populated
   mutable std::shared_ptr<const dwio::common::TypeWithId> schemaWithId_;
   uint64_t psLength_;

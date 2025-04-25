@@ -54,15 +54,12 @@ std::string childName(
 }
 } // namespace
 
+// 从schema里构造需FilterType组成的树，这个树flatten之后，每个FilterType都放到 nodes_里。
+// FilterType 持有 FilterNode，FilterNode包含了关联的Schema中的Type信息
 void ColumnSelector::buildNodes(
     const std::shared_ptr<const RowType>& schema,
     const std::shared_ptr<const RowType>& contentSchema) {
-  buildNode(
-      FilterNode(0, MAX_UINT64, "_ROOT_", "", false),
-      nullptr,
-      std::dynamic_pointer_cast<const Type>(schema),
-      std::dynamic_pointer_cast<const Type>(contentSchema),
-      true);
+  buildNode(FilterNode(0 /*typeId*/, MAX_UINT64, "_ROOT_", "", false), nullptr, std::dynamic_pointer_cast<const Type>(schema), std::dynamic_pointer_cast<const Type>(contentSchema), true);
 }
 
 FilterTypePtr ColumnSelector::buildNode(
@@ -76,6 +73,7 @@ FilterTypePtr ColumnSelector::buildNode(
   // make sure content type is compatible to reading request type
   // when content type is present (it may be absent due to schema mismatch)
   if (contentType != nullptr) {
+    // file sechema要和 read schema 类型兼容
     typeutils::checkTypeCompatibility(*contentType, *type);
   }
 

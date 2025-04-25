@@ -33,6 +33,7 @@ enum class ReadState { kPartial, kAll };
 std::pair<std::string_view, std::string_view> extractColumnName(
     const std::string_view& name);
 
+// 列选择器
 class ColumnSelector {
  public:
   /**
@@ -41,6 +42,7 @@ class ColumnSelector {
    * For this case, it may have filter only and we need to rebuild selector
    * in the run time when a file content schema is determined
    */
+  // 读文件时没有设置scehma，只有filter，这时候从filter生成列选择器
   explicit ColumnSelector(
       const ColumnFilter& filter,
       MetricsLogPtr log = nullptr)
@@ -420,6 +422,7 @@ class ColumnSelector {
 
   // note that - this filter list is not node level
   // it captures top level column projection for now
+  // 顶层的Projection
   ColumnFilter filter_;
 };
 

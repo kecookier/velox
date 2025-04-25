@@ -23,6 +23,7 @@
 
 namespace facebook::velox::dwio::common {
 
+//
 class TypeWithId : public velox::Tree<std::shared_ptr<const TypeWithId>> {
  public:
   /// NOTE: This constructor will re-parent the children.

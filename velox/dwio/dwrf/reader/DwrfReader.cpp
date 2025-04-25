@@ -225,20 +225,18 @@ void makeProjectedNodes(
 
 } // namespace
 
-DwrfRowReader::DwrfRowReader(
-    const std::shared_ptr<ReaderBase>& reader,
-    const RowReaderOptions& opts)
+DwrfRowReader::DwrfRowReader(const std::shared_ptr<ReaderBase>& reader, const RowReaderOptions& opts)
     : StripeReaderBase(reader),
       options_(opts),
+      // columnSelector_ 的初始化逻辑，1. 优先使用scanSpec，2. 否则使用options.selector 3. 否则使用fileSchema
       columnSelector_{
           options_.scanSpec() != nullptr
               ? nullptr
-              : std::make_shared<ColumnSelector>(ColumnSelector::apply(
-                    options_.selector(),
-                    reader->schema()))},
+              : std::make_shared<ColumnSelector>(ColumnSelector::apply(options_.selector(), reader->schema()))},
       decodingTimeCallback_{options_.decodingTimeCallback()},
       strideIndex_{0},
       currentUnit_{nullptr} {
+  // 1. 初始化Read相关的状态量
   const auto& fileFooter = getReader().footer();
   const uint32_t numberOfStripes = fileFooter.stripesSize();
   currentStripe_ = numberOfStripes;
@@ -267,6 +265,7 @@ DwrfRowReader::DwrfRowReader(
     stripeCeiling_ = firstStripe_;
   }
 
+  // 2. 如果设置了callback，触发回调，参数：范围内的stripe数量
   const auto stripeCountCallback = options_.stripeCountCallback();
   if (stripeCountCallback) {
     stripeCountCallback(stripeCeiling_ - firstStripe_);
@@ -293,9 +292,11 @@ DwrfRowReader::DwrfRowReader(
   };
 
   if (columnSelector_) {
+    // TODO(zhaokuo) 这里感觉重复检查了，在创建 columnSelector的时候，已经调用过检查了
     dwio::common::typeutils::checkTypeCompatibility(
         *getReader().schema(), *columnSelector_, createExceptionContext);
   } else {
+    // 设置了 options.ScanSpec
     projectedNodes_ = std::make_shared<BitSet>(0);
     makeProjectedNodes(*getReader().schemaWithId(), *projectedNodes_);
   }

@@ -33,6 +33,7 @@ using SeqFilter = std::shared_ptr<const std::unordered_set<size_t>>;
  * The filter node can be used individually such as vector
  * Or it can be used in a node tree which is good for traverse
  */
+// 过滤器基本单元：包含某个field的id或者subField的Id
 struct FilterNode {
   static const FilterNode& getInvalid() {
     static const FilterNode kInvalid(MAX_UINT64);
@@ -58,6 +59,7 @@ struct FilterNode {
   // unique node ID in the physical schema tree
   // we want to prefer this because we may want to support sub-field filtering
   // eg. struct: "column_struct.field2", this can be modeled as expression too
+  // 变量名太容易误解了，其实是个id
   const uint64_t node;
 
   // column ordinal index in physical schema
@@ -154,6 +156,7 @@ using ColumnFilter = std::vector<velox::dwio::common::FilterNode>;
  */
 class FilterType;
 using FilterTypePtr = std::shared_ptr<FilterType>;
+// TODO(zhaokuo) 还没看懂这个类的作用
 class FilterType {
  public:
   // a single value indicating not found (invalid node)
